@@ -228,12 +228,12 @@ fn handle_auth(
             2 => login(stream, l, users, options, LoginProtocolVersion::Two),
             3 => login(stream, l, users, options, LoginProtocolVersion::Three),
             8 => login(stream, l, users, options, LoginProtocolVersion::Eight),
-            _ => {}
+            v => panic!("unknown login version {v}"),
         },
         InitialMessage::Reconnect(r) => match r.protocol_version {
             2 => reconnect(stream, r, users, options, ReconnectProtocolVersion::Two),
             8 => reconnect(stream, r, users, options, ReconnectProtocolVersion::Eight),
-            _ => {}
+            v => panic!("unknown reconnect version {v}"),
         },
     }
 
