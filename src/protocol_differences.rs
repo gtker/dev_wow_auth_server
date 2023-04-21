@@ -3,7 +3,9 @@ use log::info;
 use std::io;
 use std::net::TcpStream;
 use wow_login_messages::helper::expect_client_message;
-use wow_login_messages::{version_2, version_3, version_5, version_6, version_8, ServerMessage};
+use wow_login_messages::{
+    version_2, version_3, version_5, version_6, version_7, version_8, ServerMessage,
+};
 use wow_srp::{
     GENERATOR, LARGE_SAFE_PRIME_LITTLE_ENDIAN, PROOF_LENGTH, PUBLIC_KEY_LENGTH,
     RECONNECT_CHALLENGE_DATA_LENGTH, SALT_LENGTH,
@@ -68,6 +70,19 @@ pub(crate) fn send_cmd_auth_logon_challenge_server_success(
             }
             .write(stream)?;
         }
+        LoginProtocolVersion::Seven => {
+            version_7::CMD_AUTH_LOGON_CHALLENGE_Server {
+                result: version_7::CMD_AUTH_LOGON_CHALLENGE_Server_LoginResult::Success {
+                    server_public_key,
+                    generator: vec![GENERATOR],
+                    large_safe_prime: LARGE_SAFE_PRIME_LITTLE_ENDIAN.into(),
+                    salt,
+                    crc_salt: [0; 16],
+                    security_flag: version_7::CMD_AUTH_LOGON_CHALLENGE_Server_SecurityFlag::None,
+                },
+            }
+            .write(stream)?;
+        }
         LoginProtocolVersion::Eight => {
             version_8::CMD_AUTH_LOGON_CHALLENGE_Server {
                 result: version_8::CMD_AUTH_LOGON_CHALLENGE_Server_LoginResult::Success {
@@ -125,6 +140,11 @@ pub(crate) fn get_cmd_auth_logon_proof(
                 expect_client_message::<version_6::CMD_AUTH_LOGON_PROOF_Client, _>(stream).unwrap();
             Ok((m.client_public_key, m.client_proof))
         }
+        LoginProtocolVersion::Seven => {
+            let m =
+                expect_client_message::<version_7::CMD_AUTH_LOGON_PROOF_Client, _>(stream).unwrap();
+            Ok((m.client_public_key, m.client_proof))
+        }
         LoginProtocolVersion::Eight => {
             let m = match expect_client_message::<version_8::CMD_AUTH_LOGON_PROOF_Client, _>(stream)
             {
@@ -165,6 +185,12 @@ pub(crate) fn send_cmd_auth_logon_proof_failure(
         LoginProtocolVersion::Six => {
             version_6::CMD_AUTH_LOGON_PROOF_Server {
                 result: version_6::CMD_AUTH_LOGON_PROOF_Server_LoginResult::FailIncorrectPassword,
+            }
+            .write(stream)?;
+        }
+        LoginProtocolVersion::Seven => {
+            version_7::CMD_AUTH_LOGON_PROOF_Server {
+                result: version_7::CMD_AUTH_LOGON_PROOF_Server_LoginResult::FailIncorrectPassword,
             }
             .write(stream)?;
         }
@@ -226,6 +252,16 @@ pub(crate) fn send_cmd_auth_logon_proof_success(
             }
             .write(stream)?;
         }
+        LoginProtocolVersion::Seven => {
+            version_7::CMD_AUTH_LOGON_PROOF_Server {
+                result: version_7::CMD_AUTH_LOGON_PROOF_Server_LoginResult::Success {
+                    server_proof: proof,
+                    hardware_survey_id: 0,
+                    unknown: 0,
+                },
+            }
+            .write(stream)?;
+        }
         LoginProtocolVersion::Eight => {
             version_8::CMD_AUTH_LOGON_PROOF_Server {
                 result: version_8::CMD_AUTH_LOGON_PROOF_Server_LoginResult::Success {
@@ -271,6 +307,15 @@ pub(crate) fn send_cmd_auth_reconnect_challenge(
         ReconnectProtocolVersion::Six => {
             version_6::CMD_AUTH_RECONNECT_CHALLENGE_Server {
                 result: version_6::CMD_AUTH_RECONNECT_CHALLENGE_Server_LoginResult::Success {
+                    challenge_data: server_reconnect_challenge_data,
+                    checksum_salt: [0; 16],
+                },
+            }
+            .write(stream)?;
+        }
+        ReconnectProtocolVersion::Seven => {
+            version_7::CMD_AUTH_RECONNECT_CHALLENGE_Server {
+                result: version_7::CMD_AUTH_RECONNECT_CHALLENGE_Server_LoginResult::Success {
                     challenge_data: server_reconnect_challenge_data,
                     checksum_salt: [0; 16],
                 },
@@ -335,6 +380,18 @@ pub(crate) fn get_cmd_auth_reconnect_proof(
 
             Ok((l.proof_data, l.client_proof))
         }
+        ReconnectProtocolVersion::Seven => {
+            let l = match expect_client_message::<version_7::CMD_AUTH_RECONNECT_PROOF_Client, _>(
+                stream,
+            ) {
+                Ok(l) => l,
+                Err(_) => {
+                    return Err(io::Error::new(io::ErrorKind::Other, "error"));
+                }
+            };
+
+            Ok((l.proof_data, l.client_proof))
+        }
         ReconnectProtocolVersion::Eight => {
             let l = match expect_client_message::<version_8::CMD_AUTH_RECONNECT_PROOF_Client, _>(
                 stream,
@@ -367,6 +424,10 @@ pub(crate) fn send_cmd_auth_reconnect_proof_success(
             result: version_6::LoginResult::Success,
         }
         .write(stream),
+        ReconnectProtocolVersion::Seven => version_7::CMD_AUTH_RECONNECT_PROOF_Server {
+            result: version_7::LoginResult::Success,
+        }
+        .write(stream),
         ReconnectProtocolVersion::Eight => version_8::CMD_AUTH_RECONNECT_PROOF_Server {
             result: version_8::LoginResult::Success,
         }
@@ -389,6 +450,10 @@ pub(crate) fn send_cmd_auth_reconnect_proof_incorrect_password(
         .write(stream),
         ReconnectProtocolVersion::Six => version_6::CMD_AUTH_RECONNECT_PROOF_Server {
             result: version_6::LoginResult::FailIncorrectPassword,
+        }
+        .write(stream),
+        ReconnectProtocolVersion::Seven => version_7::CMD_AUTH_RECONNECT_PROOF_Server {
+            result: version_7::LoginResult::FailIncorrectPassword,
         }
         .write(stream),
         ReconnectProtocolVersion::Eight => version_8::CMD_AUTH_RECONNECT_PROOF_Server {

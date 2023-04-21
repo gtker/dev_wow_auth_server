@@ -32,6 +32,7 @@ pub(crate) enum LoginProtocolVersion {
     Three,
     Five,
     Six,
+    Seven,
     Eight,
 }
 
@@ -40,6 +41,7 @@ pub(crate) enum ReconnectProtocolVersion {
     Two,
     Five,
     Six,
+    Seven,
     Eight,
 }
 
@@ -235,6 +237,7 @@ fn handle_auth(
             3 => login(stream, l, users, options, LoginProtocolVersion::Three),
             5 => login(stream, l, users, options, LoginProtocolVersion::Five),
             6 => login(stream, l, users, options, LoginProtocolVersion::Six),
+            7 => login(stream, l, users, options, LoginProtocolVersion::Seven),
             8 => login(stream, l, users, options, LoginProtocolVersion::Eight),
             v => panic!("unknown login version {v}"),
         },
@@ -242,6 +245,7 @@ fn handle_auth(
             2 => reconnect(stream, r, users, options, ReconnectProtocolVersion::Two),
             5 => reconnect(stream, r, users, options, ReconnectProtocolVersion::Five),
             6 => reconnect(stream, r, users, options, ReconnectProtocolVersion::Six),
+            7 => reconnect(stream, r, users, options, ReconnectProtocolVersion::Seven),
             8 => reconnect(stream, r, users, options, ReconnectProtocolVersion::Eight),
             v => panic!("unknown reconnect version {v}"),
         },
@@ -305,6 +309,9 @@ fn reconnect(
         ReconnectProtocolVersion::Six => {
             print_version_6_realm_list(stream, &username, options);
         }
+        ReconnectProtocolVersion::Seven => {
+            print_version_7_realm_list(stream, &username, options);
+        }
         ReconnectProtocolVersion::Eight => {
             print_version_8_realm_list(stream, &username, options);
         }
@@ -362,6 +369,9 @@ fn login(
         }
         LoginProtocolVersion::Six => {
             print_version_6_realm_list(stream, &username, options);
+        }
+        LoginProtocolVersion::Seven => {
+            print_version_7_realm_list(stream, &username, options);
         }
         LoginProtocolVersion::Eight => {
             print_version_8_realm_list(stream, &username, options);
@@ -534,6 +544,76 @@ fn print_version_6_realm_list(mut stream: TcpStream, username: &str, options: &O
         .unwrap();
 
         info!("[AUTH] '{}' Sent Version 6 Realm List", username);
+    }
+}
+
+fn print_version_7_realm_list(mut stream: TcpStream, username: &str, options: &Options) {
+    use wow_login_messages::version_6::*;
+
+    while (expect_client_message::<CMD_REALM_LIST_Client, _>(&mut stream)).is_ok() {
+        CMD_REALM_LIST_Server {
+            realms: vec![
+                Realm {
+                    realm_type: RealmType::PlayerVsEnvironment,
+                    locked: false,
+                    flag: RealmFlag::empty(),
+                    name: "Empty".to_string(),
+                    address: options.world.to_string(),
+                    population: Population::Other(u32::from_le_bytes(0.0_f32.to_le_bytes())),
+                    number_of_characters_on_realm: 1,
+                    category: RealmCategory::Default,
+                    realm_id: 0,
+                },
+                Realm {
+                    realm_type: RealmType::PlayerVsEnvironment,
+                    locked: false,
+                    flag: RealmFlag::empty().set_FORCE_BLUE_RECOMMENDED(),
+                    name: "Blue recommended".to_string(),
+                    address: options.world.to_string(),
+                    population: Population::Other(u32::from_le_bytes(0.0_f32.to_le_bytes())),
+                    number_of_characters_on_realm: 1,
+                    category: RealmCategory::Default,
+                    realm_id: 0,
+                },
+                Realm {
+                    realm_type: RealmType::PlayerVsEnvironment,
+                    locked: false,
+                    flag: RealmFlag::empty().set_FORCE_RED_FULL(),
+                    name: "Red full".to_string(),
+                    address: options.world.to_string(),
+                    population: Population::Other(u32::from_le_bytes(0.0_f32.to_le_bytes())),
+                    number_of_characters_on_realm: 1,
+                    category: RealmCategory::Default,
+                    realm_id: 0,
+                },
+                Realm {
+                    realm_type: RealmType::PlayerVsEnvironment,
+                    locked: false,
+                    flag: RealmFlag::empty().set_OFFLINE(),
+                    name: "Offline".to_string(),
+                    address: options.world.to_string(),
+                    population: Population::Other(u32::from_le_bytes(0.0_f32.to_le_bytes())),
+                    number_of_characters_on_realm: 1,
+                    category: RealmCategory::Default,
+                    realm_id: 0,
+                },
+                Realm {
+                    realm_type: RealmType::PlayerVsEnvironment,
+                    locked: false,
+                    flag: RealmFlag::empty().set_INVALID(),
+                    name: "Invalid".to_string(),
+                    address: options.world.to_string(),
+                    population: Population::Other(u32::from_le_bytes(0.0_f32.to_le_bytes())),
+                    number_of_characters_on_realm: 1,
+                    category: RealmCategory::Default,
+                    realm_id: 0,
+                },
+            ],
+        }
+        .write(&mut stream)
+        .unwrap();
+
+        info!("[AUTH] '{}' Sent Version 7 Realm List", username);
     }
 }
 
