@@ -7,7 +7,8 @@ edition = "2021"
 clap = { version = "4.0.18", features = ["derive"] }
 log = "0.4.17"
 simple_logger = "4.0.0"
-wow_login_messages = { git="https://github.com/gtker/wow_messages.git", rev = "5166af05169cba082caea50e784319282253e441", features = ["sync"] }
+#wow_login_messages = { git="https://github.com/gtker/wow_messages.git", rev = "5166af05169cba082caea50e784319282253e441", features = ["sync"] }
+wow_login_messages = { path = "../wow_messages/wow_login_messages", features = ["sync"] }
 wow_srp = { version = "0.5.2", default-features = false, features = ["srp-default-math"] }
 
 [features]

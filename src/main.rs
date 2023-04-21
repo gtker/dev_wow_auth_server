@@ -4,6 +4,8 @@ use io::{Read, Write};
 use std::collections::HashMap;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener, TcpStream};
 use std::sync::{Arc, Mutex};
+use std::thread::sleep;
+use std::time::Duration;
 use std::{io, thread};
 use wow_login_messages::all::{
     CMD_AUTH_LOGON_CHALLENGE_Client, CMD_AUTH_RECONNECT_CHALLENGE_Client,
@@ -17,9 +19,9 @@ use wow_srp::PublicKey;
 
 use crate::protocol_differences::{
     get_cmd_auth_logon_proof, get_cmd_auth_reconnect_proof,
-    send_cmd_auth_logon_challenge_server_success, send_cmd_auth_logon_proof,
-    send_cmd_auth_reconnect_challenge, send_cmd_auth_reconnect_proof_incorrect_password,
-    send_cmd_auth_reconnect_proof_success,
+    send_cmd_auth_logon_challenge_server_success, send_cmd_auth_logon_proof_failure,
+    send_cmd_auth_logon_proof_success, send_cmd_auth_reconnect_challenge,
+    send_cmd_auth_reconnect_proof_incorrect_password, send_cmd_auth_reconnect_proof_success,
 };
 use clap::Parser;
 use log::{error, info};
@@ -28,12 +30,14 @@ use log::{error, info};
 pub(crate) enum LoginProtocolVersion {
     Two,
     Three,
+    Five,
     Eight,
 }
 
 #[derive(Debug, Copy, Clone)]
 pub(crate) enum ReconnectProtocolVersion {
     Two,
+    Five,
     Eight,
 }
 
@@ -227,11 +231,13 @@ fn handle_auth(
         InitialMessage::Logon(l) => match l.protocol_version {
             2 => login(stream, l, users, options, LoginProtocolVersion::Two),
             3 => login(stream, l, users, options, LoginProtocolVersion::Three),
+            5 => login(stream, l, users, options, LoginProtocolVersion::Five),
             8 => login(stream, l, users, options, LoginProtocolVersion::Eight),
             v => panic!("unknown login version {v}"),
         },
         InitialMessage::Reconnect(r) => match r.protocol_version {
             2 => reconnect(stream, r, users, options, ReconnectProtocolVersion::Two),
+            5 => reconnect(stream, r, users, options, ReconnectProtocolVersion::Five),
             8 => reconnect(stream, r, users, options, ReconnectProtocolVersion::Eight),
             v => panic!("unknown reconnect version {v}"),
         },
@@ -289,6 +295,9 @@ fn reconnect(
         ReconnectProtocolVersion::Two => {
             print_version_2_3_realm_list(stream, &username, options);
         }
+        ReconnectProtocolVersion::Five => {
+            print_version_5_realm_list(stream, &username, options);
+        }
         ReconnectProtocolVersion::Eight => {
             print_version_8_realm_list(stream, &username, options);
         }
@@ -321,20 +330,27 @@ fn login(
     let (client_public_key, client_proof) =
         get_cmd_auth_logon_proof(&mut stream, protocol_version).unwrap();
 
-    let (p, proof) = p
-        .into_server(
-            PublicKey::from_le_bytes(&client_public_key).unwrap(),
-            client_proof,
-        )
-        .unwrap();
+    let (p, proof) = if let Ok(a) = p.into_server(
+        PublicKey::from_le_bytes(&client_public_key).unwrap(),
+        client_proof,
+    ) {
+        a
+    } else {
+        send_cmd_auth_logon_proof_failure(&mut stream, protocol_version, &username).unwrap();
+        sleep(Duration::from_secs(1));
+        return;
+    };
 
-    send_cmd_auth_logon_proof(&mut stream, protocol_version, &username, proof).unwrap();
+    send_cmd_auth_logon_proof_success(&mut stream, protocol_version, &username, proof).unwrap();
 
     users.lock().unwrap().insert(username.clone(), p);
 
     match protocol_version {
         LoginProtocolVersion::Two | LoginProtocolVersion::Three => {
             print_version_2_3_realm_list(stream, &username, options);
+        }
+        LoginProtocolVersion::Five => {
+            print_version_5_realm_list(stream, &username, options);
         }
         LoginProtocolVersion::Eight => {
             print_version_8_realm_list(stream, &username, options);
@@ -370,6 +386,76 @@ fn print_version_2_3_realm_list(mut stream: TcpStream, username: &str, options: 
     }
 }
 
+fn print_version_5_realm_list(mut stream: TcpStream, username: &str, options: &Options) {
+    use wow_login_messages::version_5::*;
+
+    while (expect_client_message::<CMD_REALM_LIST_Client, _>(&mut stream)).is_ok() {
+        CMD_REALM_LIST_Server {
+            realms: vec![
+                Realm {
+                    realm_type: RealmType::PlayerVsEnvironment,
+                    locked: false,
+                    flag: RealmFlag::empty(),
+                    name: "Empty".to_string(),
+                    address: options.world.to_string(),
+                    population: Population::Other(u32::from_le_bytes(0.0_f32.to_le_bytes())),
+                    number_of_characters_on_realm: 1,
+                    category: RealmCategory::Default,
+                    realm_id: 0,
+                },
+                Realm {
+                    realm_type: RealmType::PlayerVsEnvironment,
+                    locked: false,
+                    flag: RealmFlag::empty().set_FORCE_BLUE_RECOMMENDED(),
+                    name: "Blue recommended".to_string(),
+                    address: options.world.to_string(),
+                    population: Population::Other(u32::from_le_bytes(0.0_f32.to_le_bytes())),
+                    number_of_characters_on_realm: 1,
+                    category: RealmCategory::Default,
+                    realm_id: 0,
+                },
+                Realm {
+                    realm_type: RealmType::PlayerVsEnvironment,
+                    locked: false,
+                    flag: RealmFlag::empty().set_FORCE_RED_FULL(),
+                    name: "Red full".to_string(),
+                    address: options.world.to_string(),
+                    population: Population::Other(u32::from_le_bytes(0.0_f32.to_le_bytes())),
+                    number_of_characters_on_realm: 1,
+                    category: RealmCategory::Default,
+                    realm_id: 0,
+                },
+                Realm {
+                    realm_type: RealmType::PlayerVsEnvironment,
+                    locked: false,
+                    flag: RealmFlag::empty().set_OFFLINE(),
+                    name: "Offline".to_string(),
+                    address: options.world.to_string(),
+                    population: Population::Other(u32::from_le_bytes(0.0_f32.to_le_bytes())),
+                    number_of_characters_on_realm: 1,
+                    category: RealmCategory::Default,
+                    realm_id: 0,
+                },
+                Realm {
+                    realm_type: RealmType::PlayerVsEnvironment,
+                    locked: false,
+                    flag: RealmFlag::empty().set_INVALID(),
+                    name: "Invalid".to_string(),
+                    address: options.world.to_string(),
+                    population: Population::Other(u32::from_le_bytes(0.0_f32.to_le_bytes())),
+                    number_of_characters_on_realm: 1,
+                    category: RealmCategory::Default,
+                    realm_id: 0,
+                },
+            ],
+        }
+        .write(&mut stream)
+        .unwrap();
+
+        info!("[AUTH] '{}' Sent Version 5 Realm List", username);
+    }
+}
+
 fn print_version_8_realm_list(mut stream: TcpStream, username: &str, options: &Options) {
     use wow_login_messages::version_8::*;
 
@@ -377,7 +463,7 @@ fn print_version_8_realm_list(mut stream: TcpStream, username: &str, options: &O
         CMD_REALM_LIST_Server {
             realms: vec![Realm {
                 realm_type: RealmType::PlayerVsEnvironment,
-                locked: 0,
+                locked: false,
                 flag: Default::default(),
                 name: "Tester".to_string(),
                 address: options.world.to_string(),

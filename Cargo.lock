@@ -519,8 +519,7 @@ checksum = "f40009d85759725a34da6d89a94e63d7bdc50a862acf0dbc7c8e488f1edcb6f5"
 
 [[package]]
 name = "wow_login_messages"
-version = "0.1.0"
-source = "git+https://github.com/gtker/wow_messages.git?rev=5166af05169cba082caea50e784319282253e441#5166af05169cba082caea50e784319282253e441"
+version = "0.2.0"
 
 [[package]]
 name = "wow_srp"
