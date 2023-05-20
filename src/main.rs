@@ -359,7 +359,6 @@ fn login(
 
     users.lock().unwrap().insert(username.clone(), p);
 
-    return;
     match protocol_version {
         LoginProtocolVersion::Two | LoginProtocolVersion::Three => {
             print_version_2_3_realm_list(stream, &username, options);
@@ -427,7 +426,7 @@ fn print_version_5_realm_list(mut stream: TcpStream, username: &str, options: &O
                 Realm {
                     realm_type: RealmType::PlayerVsEnvironment,
                     locked: false,
-                    flag: RealmFlag::empty().set_FORCE_BLUE_RECOMMENDED(),
+                    flag: RealmFlag::empty().set_force_blue_recommended(),
                     name: "Blue recommended".to_string(),
                     address: options.world.to_string(),
                     population: Population::Other(u32::from_le_bytes(0.0_f32.to_le_bytes())),
@@ -438,7 +437,7 @@ fn print_version_5_realm_list(mut stream: TcpStream, username: &str, options: &O
                 Realm {
                     realm_type: RealmType::PlayerVsEnvironment,
                     locked: false,
-                    flag: RealmFlag::empty().set_FORCE_RED_FULL(),
+                    flag: RealmFlag::empty().set_force_red_full(),
                     name: "Red full".to_string(),
                     address: options.world.to_string(),
                     population: Population::Other(u32::from_le_bytes(0.0_f32.to_le_bytes())),
@@ -449,7 +448,7 @@ fn print_version_5_realm_list(mut stream: TcpStream, username: &str, options: &O
                 Realm {
                     realm_type: RealmType::PlayerVsEnvironment,
                     locked: false,
-                    flag: RealmFlag::empty().set_OFFLINE(),
+                    flag: RealmFlag::empty().set_offline(),
                     name: "Offline".to_string(),
                     address: options.world.to_string(),
                     population: Population::Other(u32::from_le_bytes(0.0_f32.to_le_bytes())),
@@ -460,7 +459,7 @@ fn print_version_5_realm_list(mut stream: TcpStream, username: &str, options: &O
                 Realm {
                     realm_type: RealmType::PlayerVsEnvironment,
                     locked: false,
-                    flag: RealmFlag::empty().set_INVALID(),
+                    flag: RealmFlag::empty().set_invalid(),
                     name: "Invalid".to_string(),
                     address: options.world.to_string(),
                     population: Population::Other(u32::from_le_bytes(0.0_f32.to_le_bytes())),
@@ -497,7 +496,7 @@ fn print_version_6_realm_list(mut stream: TcpStream, username: &str, options: &O
                 Realm {
                     realm_type: RealmType::PlayerVsEnvironment,
                     locked: false,
-                    flag: RealmFlag::empty().set_FORCE_BLUE_RECOMMENDED(),
+                    flag: RealmFlag::empty().set_force_blue_recommended(),
                     name: "Blue recommended".to_string(),
                     address: options.world.to_string(),
                     population: Population::Other(u32::from_le_bytes(0.0_f32.to_le_bytes())),
@@ -508,7 +507,7 @@ fn print_version_6_realm_list(mut stream: TcpStream, username: &str, options: &O
                 Realm {
                     realm_type: RealmType::PlayerVsEnvironment,
                     locked: false,
-                    flag: RealmFlag::empty().set_FORCE_RED_FULL(),
+                    flag: RealmFlag::empty().set_force_red_full(),
                     name: "Red full".to_string(),
                     address: options.world.to_string(),
                     population: Population::Other(u32::from_le_bytes(0.0_f32.to_le_bytes())),
@@ -519,7 +518,7 @@ fn print_version_6_realm_list(mut stream: TcpStream, username: &str, options: &O
                 Realm {
                     realm_type: RealmType::PlayerVsEnvironment,
                     locked: false,
-                    flag: RealmFlag::empty().set_OFFLINE(),
+                    flag: RealmFlag::empty().set_offline(),
                     name: "Offline".to_string(),
                     address: options.world.to_string(),
                     population: Population::Other(u32::from_le_bytes(0.0_f32.to_le_bytes())),
@@ -530,7 +529,7 @@ fn print_version_6_realm_list(mut stream: TcpStream, username: &str, options: &O
                 Realm {
                     realm_type: RealmType::PlayerVsEnvironment,
                     locked: false,
-                    flag: RealmFlag::empty().set_INVALID(),
+                    flag: RealmFlag::empty().set_invalid(),
                     name: "Invalid".to_string(),
                     address: options.world.to_string(),
                     population: Population::Other(u32::from_le_bytes(0.0_f32.to_le_bytes())),
@@ -567,7 +566,7 @@ fn print_version_7_realm_list(mut stream: TcpStream, username: &str, options: &O
                 Realm {
                     realm_type: RealmType::PlayerVsEnvironment,
                     locked: false,
-                    flag: RealmFlag::empty().set_FORCE_BLUE_RECOMMENDED(),
+                    flag: RealmFlag::empty().set_force_blue_recommended(),
                     name: "Blue recommended".to_string(),
                     address: options.world.to_string(),
                     population: Population::Other(u32::from_le_bytes(0.0_f32.to_le_bytes())),
@@ -578,7 +577,7 @@ fn print_version_7_realm_list(mut stream: TcpStream, username: &str, options: &O
                 Realm {
                     realm_type: RealmType::PlayerVsEnvironment,
                     locked: false,
-                    flag: RealmFlag::empty().set_FORCE_RED_FULL(),
+                    flag: RealmFlag::empty().set_force_red_full(),
                     name: "Red full".to_string(),
                     address: options.world.to_string(),
                     population: Population::Other(u32::from_le_bytes(0.0_f32.to_le_bytes())),
@@ -589,7 +588,7 @@ fn print_version_7_realm_list(mut stream: TcpStream, username: &str, options: &O
                 Realm {
                     realm_type: RealmType::PlayerVsEnvironment,
                     locked: false,
-                    flag: RealmFlag::empty().set_OFFLINE(),
+                    flag: RealmFlag::empty().set_offline(),
                     name: "Offline".to_string(),
                     address: options.world.to_string(),
                     population: Population::Other(u32::from_le_bytes(0.0_f32.to_le_bytes())),
@@ -600,7 +599,7 @@ fn print_version_7_realm_list(mut stream: TcpStream, username: &str, options: &O
                 Realm {
                     realm_type: RealmType::PlayerVsEnvironment,
                     locked: false,
-                    flag: RealmFlag::empty().set_INVALID(),
+                    flag: RealmFlag::empty().set_invalid(),
                     name: "Invalid".to_string(),
                     address: options.world.to_string(),
                     population: Population::Other(u32::from_le_bytes(0.0_f32.to_le_bytes())),
@@ -630,7 +629,7 @@ fn print_version_8_realm_list(mut stream: TcpStream, username: &str, options: &O
                 address: options.world.to_string(),
                 population: Default::default(),
                 number_of_characters_on_realm: 0,
-                category: RealmCategory::Default,
+                category: RealmCategory::One,
                 realm_id: 0,
             }],
         }
