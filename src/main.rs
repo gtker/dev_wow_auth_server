@@ -8,11 +8,12 @@ use std::thread::sleep;
 use std::time::Duration;
 use std::{io, thread};
 use wow_login_messages::all::{
-    CMD_AUTH_LOGON_CHALLENGE_Client, CMD_AUTH_RECONNECT_CHALLENGE_Client,
+    CMD_AUTH_LOGON_CHALLENGE_Client, CMD_AUTH_RECONNECT_CHALLENGE_Client, Population,
+    ProtocolVersion,
 };
 use wow_login_messages::errors::ExpectedOpcodeError;
 use wow_login_messages::helper::{expect_client_message, read_initial_message, InitialMessage};
-use wow_login_messages::ServerMessage;
+use wow_login_messages::Message;
 use wow_srp::normalized_string::NormalizedString;
 use wow_srp::server::{SrpProof, SrpServer, SrpVerifier};
 use wow_srp::PublicKey;
@@ -25,25 +26,6 @@ use crate::protocol_differences::{
 };
 use clap::Parser;
 use log::{error, info};
-
-#[derive(Debug, Copy, Clone)]
-pub(crate) enum LoginProtocolVersion {
-    Two,
-    Three,
-    Five,
-    Six,
-    Seven,
-    Eight,
-}
-
-#[derive(Debug, Copy, Clone)]
-pub(crate) enum ReconnectProtocolVersion {
-    Two,
-    Five,
-    Six,
-    Seven,
-    Eight,
-}
 
 #[derive(Parser)]
 #[command(author, version, about, long_about = None)]
@@ -226,6 +208,9 @@ fn handle_auth(
                 ExpectedOpcodeError::Parse(e) => {
                     error!("[AUTH] parse error {:#?}", e)
                 }
+                ExpectedOpcodeError::Io(e) => {
+                    error!("[AUTH] io error {:#?}", e)
+                }
             }
             return Err(io::Error::new(io::ErrorKind::Other, e));
         }
@@ -233,21 +218,20 @@ fn handle_auth(
 
     match opcode {
         InitialMessage::Logon(l) => match l.protocol_version {
-            2 => login(stream, l, users, options, LoginProtocolVersion::Two),
-            3 => login(stream, l, users, options, LoginProtocolVersion::Three),
-            5 => login(stream, l, users, options, LoginProtocolVersion::Five),
-            6 => login(stream, l, users, options, LoginProtocolVersion::Six),
-            7 => login(stream, l, users, options, LoginProtocolVersion::Seven),
-            8 => login(stream, l, users, options, LoginProtocolVersion::Eight),
-            v => panic!("unknown login version {v}"),
+            ProtocolVersion::Two => login(stream, l, users, options, ProtocolVersion::Two),
+            ProtocolVersion::Three => login(stream, l, users, options, ProtocolVersion::Three),
+            ProtocolVersion::Five => login(stream, l, users, options, ProtocolVersion::Five),
+            ProtocolVersion::Six => login(stream, l, users, options, ProtocolVersion::Six),
+            ProtocolVersion::Seven => login(stream, l, users, options, ProtocolVersion::Seven),
+            ProtocolVersion::Eight => login(stream, l, users, options, ProtocolVersion::Eight),
         },
         InitialMessage::Reconnect(r) => match r.protocol_version {
-            2 => reconnect(stream, r, users, options, ReconnectProtocolVersion::Two),
-            5 => reconnect(stream, r, users, options, ReconnectProtocolVersion::Five),
-            6 => reconnect(stream, r, users, options, ReconnectProtocolVersion::Six),
-            7 => reconnect(stream, r, users, options, ReconnectProtocolVersion::Seven),
-            8 => reconnect(stream, r, users, options, ReconnectProtocolVersion::Eight),
-            v => panic!("unknown reconnect version {v}"),
+            ProtocolVersion::Two => reconnect(stream, r, users, options, ProtocolVersion::Two),
+            ProtocolVersion::Five => reconnect(stream, r, users, options, ProtocolVersion::Five),
+            ProtocolVersion::Six => reconnect(stream, r, users, options, ProtocolVersion::Six),
+            ProtocolVersion::Seven => reconnect(stream, r, users, options, ProtocolVersion::Seven),
+            ProtocolVersion::Eight => reconnect(stream, r, users, options, ProtocolVersion::Eight),
+            ProtocolVersion::Three => panic!("invalid reconnect flag: Three"),
         },
     }
 
@@ -259,7 +243,7 @@ fn reconnect(
     r: CMD_AUTH_RECONNECT_CHALLENGE_Client,
     users: Arc<Mutex<HashMap<String, SrpServer>>>,
     options: &Options,
-    protocol_version: ReconnectProtocolVersion,
+    protocol_version: ProtocolVersion,
 ) {
     info!(
         "[AUTH] '{}' Reconnect version: {}",
@@ -300,21 +284,22 @@ fn reconnect(
     send_cmd_auth_reconnect_proof_success(&mut stream, protocol_version).unwrap();
 
     match protocol_version {
-        ReconnectProtocolVersion::Two => {
+        ProtocolVersion::Two => {
             print_version_2_3_realm_list(stream, &username, options);
         }
-        ReconnectProtocolVersion::Five => {
+        ProtocolVersion::Five => {
             print_version_5_realm_list(stream, &username, options);
         }
-        ReconnectProtocolVersion::Six => {
+        ProtocolVersion::Six => {
             print_version_6_realm_list(stream, &username, options);
         }
-        ReconnectProtocolVersion::Seven => {
+        ProtocolVersion::Seven => {
             print_version_7_realm_list(stream, &username, options);
         }
-        ReconnectProtocolVersion::Eight => {
+        ProtocolVersion::Eight => {
             print_version_8_realm_list(stream, &username, options);
         }
+        ProtocolVersion::Three => panic!(),
     }
 }
 
@@ -323,7 +308,7 @@ fn login(
     l: CMD_AUTH_LOGON_CHALLENGE_Client,
     users: Arc<Mutex<HashMap<String, SrpServer>>>,
     options: &Options,
-    protocol_version: LoginProtocolVersion,
+    protocol_version: ProtocolVersion,
 ) {
     info!(
         "[AUTH] '{}' Login version: {}",
@@ -345,7 +330,7 @@ fn login(
         get_cmd_auth_logon_proof(&mut stream, protocol_version).unwrap();
 
     let (p, proof) = if let Ok(a) = p.into_server(
-        PublicKey::from_le_bytes(&client_public_key).unwrap(),
+        PublicKey::from_le_bytes(client_public_key).unwrap(),
         client_proof,
     ) {
         a
@@ -360,19 +345,19 @@ fn login(
     users.lock().unwrap().insert(username.clone(), p);
 
     match protocol_version {
-        LoginProtocolVersion::Two | LoginProtocolVersion::Three => {
+        ProtocolVersion::Two | ProtocolVersion::Three => {
             print_version_2_3_realm_list(stream, &username, options);
         }
-        LoginProtocolVersion::Five => {
+        ProtocolVersion::Five => {
             print_version_5_realm_list(stream, &username, options);
         }
-        LoginProtocolVersion::Six => {
+        ProtocolVersion::Six => {
             print_version_6_realm_list(stream, &username, options);
         }
-        LoginProtocolVersion::Seven => {
+        ProtocolVersion::Seven => {
             print_version_7_realm_list(stream, &username, options);
         }
-        LoginProtocolVersion::Eight => {
+        ProtocolVersion::Eight => {
             print_version_8_realm_list(stream, &username, options);
         }
     }
@@ -418,7 +403,7 @@ fn print_version_5_realm_list(mut stream: TcpStream, username: &str, options: &O
                     flag: RealmFlag::empty(),
                     name: "Empty".to_string(),
                     address: options.world.to_string(),
-                    population: Population::Other(u32::from_le_bytes(0.0_f32.to_le_bytes())),
+                    population: Population::Other(0.0),
                     number_of_characters_on_realm: 1,
                     category: RealmCategory::Default,
                     realm_id: 0,
@@ -429,7 +414,7 @@ fn print_version_5_realm_list(mut stream: TcpStream, username: &str, options: &O
                     flag: RealmFlag::empty().set_force_blue_recommended(),
                     name: "Blue recommended".to_string(),
                     address: options.world.to_string(),
-                    population: Population::Other(u32::from_le_bytes(0.0_f32.to_le_bytes())),
+                    population: Population::Other(0.0),
                     number_of_characters_on_realm: 1,
                     category: RealmCategory::Default,
                     realm_id: 0,
@@ -440,7 +425,7 @@ fn print_version_5_realm_list(mut stream: TcpStream, username: &str, options: &O
                     flag: RealmFlag::empty().set_force_red_full(),
                     name: "Red full".to_string(),
                     address: options.world.to_string(),
-                    population: Population::Other(u32::from_le_bytes(0.0_f32.to_le_bytes())),
+                    population: Population::Other(0.0),
                     number_of_characters_on_realm: 1,
                     category: RealmCategory::Default,
                     realm_id: 0,
@@ -451,7 +436,7 @@ fn print_version_5_realm_list(mut stream: TcpStream, username: &str, options: &O
                     flag: RealmFlag::empty().set_offline(),
                     name: "Offline".to_string(),
                     address: options.world.to_string(),
-                    population: Population::Other(u32::from_le_bytes(0.0_f32.to_le_bytes())),
+                    population: Population::Other(0.0),
                     number_of_characters_on_realm: 1,
                     category: RealmCategory::Default,
                     realm_id: 0,
@@ -462,7 +447,7 @@ fn print_version_5_realm_list(mut stream: TcpStream, username: &str, options: &O
                     flag: RealmFlag::empty().set_invalid(),
                     name: "Invalid".to_string(),
                     address: options.world.to_string(),
-                    population: Population::Other(u32::from_le_bytes(0.0_f32.to_le_bytes())),
+                    population: Population::Other(0.0),
                     number_of_characters_on_realm: 1,
                     category: RealmCategory::Default,
                     realm_id: 0,
@@ -488,7 +473,7 @@ fn print_version_6_realm_list(mut stream: TcpStream, username: &str, options: &O
                     flag: RealmFlag::empty(),
                     name: "Empty".to_string(),
                     address: options.world.to_string(),
-                    population: Population::Other(u32::from_le_bytes(0.0_f32.to_le_bytes())),
+                    population: Population::Other(0.0),
                     number_of_characters_on_realm: 1,
                     category: RealmCategory::Default,
                     realm_id: 0,
@@ -499,7 +484,7 @@ fn print_version_6_realm_list(mut stream: TcpStream, username: &str, options: &O
                     flag: RealmFlag::empty().set_force_blue_recommended(),
                     name: "Blue recommended".to_string(),
                     address: options.world.to_string(),
-                    population: Population::Other(u32::from_le_bytes(0.0_f32.to_le_bytes())),
+                    population: Population::Other(0.0),
                     number_of_characters_on_realm: 1,
                     category: RealmCategory::Default,
                     realm_id: 0,
@@ -510,7 +495,7 @@ fn print_version_6_realm_list(mut stream: TcpStream, username: &str, options: &O
                     flag: RealmFlag::empty().set_force_red_full(),
                     name: "Red full".to_string(),
                     address: options.world.to_string(),
-                    population: Population::Other(u32::from_le_bytes(0.0_f32.to_le_bytes())),
+                    population: Population::Other(0.0),
                     number_of_characters_on_realm: 1,
                     category: RealmCategory::Default,
                     realm_id: 0,
@@ -521,7 +506,7 @@ fn print_version_6_realm_list(mut stream: TcpStream, username: &str, options: &O
                     flag: RealmFlag::empty().set_offline(),
                     name: "Offline".to_string(),
                     address: options.world.to_string(),
-                    population: Population::Other(u32::from_le_bytes(0.0_f32.to_le_bytes())),
+                    population: Population::Other(0.0),
                     number_of_characters_on_realm: 1,
                     category: RealmCategory::Default,
                     realm_id: 0,
@@ -532,7 +517,7 @@ fn print_version_6_realm_list(mut stream: TcpStream, username: &str, options: &O
                     flag: RealmFlag::empty().set_invalid(),
                     name: "Invalid".to_string(),
                     address: options.world.to_string(),
-                    population: Population::Other(u32::from_le_bytes(0.0_f32.to_le_bytes())),
+                    population: Population::Other(0.0),
                     number_of_characters_on_realm: 1,
                     category: RealmCategory::Default,
                     realm_id: 0,
@@ -558,7 +543,7 @@ fn print_version_7_realm_list(mut stream: TcpStream, username: &str, options: &O
                     flag: RealmFlag::empty(),
                     name: "Empty".to_string(),
                     address: options.world.to_string(),
-                    population: Population::Other(u32::from_le_bytes(0.0_f32.to_le_bytes())),
+                    population: Population::Other(0.0),
                     number_of_characters_on_realm: 1,
                     category: RealmCategory::Default,
                     realm_id: 0,
@@ -569,7 +554,7 @@ fn print_version_7_realm_list(mut stream: TcpStream, username: &str, options: &O
                     flag: RealmFlag::empty().set_force_blue_recommended(),
                     name: "Blue recommended".to_string(),
                     address: options.world.to_string(),
-                    population: Population::Other(u32::from_le_bytes(0.0_f32.to_le_bytes())),
+                    population: Population::Other(0.0),
                     number_of_characters_on_realm: 1,
                     category: RealmCategory::Default,
                     realm_id: 0,
@@ -580,7 +565,7 @@ fn print_version_7_realm_list(mut stream: TcpStream, username: &str, options: &O
                     flag: RealmFlag::empty().set_force_red_full(),
                     name: "Red full".to_string(),
                     address: options.world.to_string(),
-                    population: Population::Other(u32::from_le_bytes(0.0_f32.to_le_bytes())),
+                    population: Population::Other(0.0),
                     number_of_characters_on_realm: 1,
                     category: RealmCategory::Default,
                     realm_id: 0,
@@ -591,7 +576,7 @@ fn print_version_7_realm_list(mut stream: TcpStream, username: &str, options: &O
                     flag: RealmFlag::empty().set_offline(),
                     name: "Offline".to_string(),
                     address: options.world.to_string(),
-                    population: Population::Other(u32::from_le_bytes(0.0_f32.to_le_bytes())),
+                    population: Population::Other(0.0),
                     number_of_characters_on_realm: 1,
                     category: RealmCategory::Default,
                     realm_id: 0,
@@ -602,7 +587,7 @@ fn print_version_7_realm_list(mut stream: TcpStream, username: &str, options: &O
                     flag: RealmFlag::empty().set_invalid(),
                     name: "Invalid".to_string(),
                     address: options.world.to_string(),
-                    population: Population::Other(u32::from_le_bytes(0.0_f32.to_le_bytes())),
+                    population: Population::Other(0.0),
                     number_of_characters_on_realm: 1,
                     category: RealmCategory::Default,
                     realm_id: 0,
