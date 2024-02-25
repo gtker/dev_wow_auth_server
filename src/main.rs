@@ -1,6 +1,6 @@
 use io::{Read, Write};
 use std::collections::HashMap;
-use std::net::{IpAddr, Ipv4Addr, SocketAddr, TcpListener, TcpStream};
+use std::net::{SocketAddr, TcpListener, TcpStream};
 use std::sync::{Arc, Mutex};
 use std::thread::sleep;
 use std::time::Duration;
@@ -33,63 +33,32 @@ use wow_login_messages::version_8::{CMD_AUTH_RECONNECT_PROOF_Server, LoginResult
 use wow_login_messages::version_8::{CMD_REALM_LIST_Server, Realm, RealmType};
 use wow_login_messages::CollectiveMessage;
 
-#[derive(Parser)]
+#[derive(Parser, Copy, Clone)]
 #[command(author, version, about, long_about = None)]
-struct Cli {
-    /// Socket of authentication/login server. Default is '127.0.0.1:3724'.
-    #[arg(short, long)]
-    auth: Option<SocketAddr>,
-    /// Socket of world server (where the realm list points to). Default is '127.0.0.1:8085'.
-    #[arg(short, long)]
-    world: Option<SocketAddr>,
-    /// Socket of reply server (where you query session keys). Default is '127.0.0.1:8086'.
-    #[arg(short, long)]
-    reply: Option<SocketAddr>,
-}
-
-#[derive(Debug, Clone, Copy)]
 struct Options {
+    /// Socket of authentication/login server.
+    #[arg(short, long, default_value = "127.0.0.1:3724")]
     auth: SocketAddr,
+    /// Socket of world server (where the realm list points to).
+    #[arg(short, long, default_value = "127.0.0.1:8085")]
     world: SocketAddr,
+    /// Socket of reply server (where you query session keys).
+    #[arg(short, long, default_value = "127.0.0.1:8086")]
     reply: SocketAddr,
-}
-
-impl Options {
-    pub fn new(cli: Cli) -> Self {
-        Self {
-            auth: if let Some(p) = cli.auth {
-                p
-            } else {
-                SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 3724)
-            },
-            world: if let Some(p) = cli.world {
-                p
-            } else {
-                SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8085)
-            },
-            reply: if let Some(p) = cli.reply {
-                p
-            } else {
-                SocketAddr::new(IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1)), 8086)
-            },
-        }
-    }
 }
 
 fn main() {
     simple_logger::SimpleLogger::new().env().init().unwrap();
 
-    let cli = Cli::parse();
+    let cli = Options::parse();
 
     let users = Arc::new(Mutex::new(HashMap::new()));
 
     let reply_users = users.clone();
 
-    let options = Options::new(cli);
+    let auth_thread = thread::spawn(move || auth(users, &cli));
 
-    let auth_thread = thread::spawn(move || auth(users, &options));
-
-    let reply_thread = thread::spawn(move || reply(reply_users, &options));
+    let reply_thread = thread::spawn(move || reply(reply_users, &cli));
 
     reply_thread.join().unwrap();
     auth_thread.join().unwrap();
